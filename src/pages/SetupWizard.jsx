@@ -66,6 +66,14 @@ export default function SetupWizard() {
       } catch (e) {
         if (e.message === 'PRESS_BUTTON' && attempts < 30) {
           setTimeout(tryPair, 2000);
+        } else if (e.message === 'PRESS_BUTTON') {
+          setError('Knop niet ingedrukt binnen 60 seconden. Probeer opnieuw.');
+          setStep('discover');
+          setPairing(false);
+        } else if (e.name === 'TypeError' || e.message?.includes('fetch')) {
+          setError(`Bridge niet bereikbaar op ${ip}. Controleer het IP-adres en WiFi.`);
+          setStep('discover');
+          setPairing(false);
         } else {
           setError(e.message || 'Koppeling mislukt');
           setStep('discover');

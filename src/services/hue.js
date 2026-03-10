@@ -26,10 +26,16 @@ export async function discoverBridges() {
 
 // ─── Pairing ──────────────────────────────────────────────────────────────────
 export async function pairWithBridge(ip) {
-  const res = await fetch(`http://${ip}/api`, {
-    method: 'POST',
-    body: JSON.stringify({ devicetype: HUE_APP_NAME, generateclientkey: true }),
-  });
+  let res;
+  try {
+    res = await fetch(`http://${ip}/api`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ devicetype: HUE_APP_NAME, generateclientkey: true }),
+    });
+  } catch {
+    throw new TypeError(`Kan bridge niet bereiken op ${ip}`);
+  }
   const data = await res.json();
   if (data[0]?.success) {
     const username = data[0].success.username;

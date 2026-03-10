@@ -62,16 +62,20 @@ export default function LightBulb({ light, x, y, onTap, onLongPress, editMode, o
     handleEnd(t.clientX, t.clientY);
   };
 
-  // Mouse handlers (for desktop)
+  // Mouse handlers (for desktop) – attach move/up to document so fast drags don't break
   const onMouseDown = (e) => {
     e.preventDefault();
     handleStart(e.clientX, e.clientY);
+
+    const onDocMove = (ev) => handleMove(ev.clientX, ev.clientY);
+    const onDocUp = (ev) => {
+      handleEnd(ev.clientX, ev.clientY);
+      document.removeEventListener('mousemove', onDocMove);
+      document.removeEventListener('mouseup', onDocUp);
+    };
+    document.addEventListener('mousemove', onDocMove);
+    document.addEventListener('mouseup', onDocUp);
   };
-  const onMouseMove = (e) => {
-    if (e.buttons !== 1) return;
-    handleMove(e.clientX, e.clientY);
-  };
-  const onMouseUp = (e) => handleEnd(e.clientX, e.clientY);
 
   const glowSize = isOn ? 8 + brightness * 16 : 0;
   const glowOpacity = isOn ? 0.5 + brightness * 0.4 : 0;
@@ -84,8 +88,6 @@ export default function LightBulb({ light, x, y, onTap, onLongPress, editMode, o
       onTouchMove={onTouchMove}
       onTouchEnd={onTouchEnd}
       onMouseDown={onMouseDown}
-      onMouseMove={onMouseMove}
-      onMouseUp={onMouseUp}
     >
       {/* Glow halo */}
       {isOn && (

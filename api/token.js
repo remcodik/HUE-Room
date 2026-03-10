@@ -17,7 +17,12 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Server niet geconfigureerd – voeg HUE_CLIENT_ID en HUE_CLIENT_SECRET toe als Vercel environment variables.' });
   }
 
-  const { grant_type, code, refresh_token } = req.method === 'POST'
+  // Handle CORS preflight
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
+  const { grant_type, code, refresh_token, redirect_uri } = req.method === 'POST'
     ? req.body
     : req.query;
 
@@ -29,6 +34,7 @@ export default async function handler(req, res) {
   if (grant_type === 'authorization_code') {
     if (!code) return res.status(400).json({ error: 'code is verplicht' });
     body.append('code', code);
+    if (redirect_uri) body.append('redirect_uri', redirect_uri);
   } else if (grant_type === 'refresh_token') {
     if (!refresh_token) return res.status(400).json({ error: 'refresh_token is verplicht' });
     body.append('refresh_token', refresh_token);
@@ -47,11 +53,6 @@ export default async function handler(req, res) {
     });
 
     const data = await tokenRes.json();
-
-    // Allow CORS for the frontend origin
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-
     return res.status(tokenRes.ok ? 200 : tokenRes.status).json(data);
   } catch (err) {
     return res.status(502).json({ error: 'Hue API niet bereikbaar', detail: err.message });

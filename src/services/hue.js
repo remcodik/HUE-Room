@@ -123,6 +123,147 @@ export async function activateScene(sceneId, groupId) {
   });
 }
 
+// ─── Extended API endpoints ───────────────────────────────────────────────────
+
+export async function fetchSensors() {
+  const res = await fetch(apiUrl('/sensors'));
+  const data = await res.json();
+  return Object.entries(data).map(([id, s]) => ({
+    id,
+    name: s.name,
+    type: s.type,             // 'ZLLPresence' | 'ZLLTemperature' | 'ZLLLightLevel' | 'ZGPSwitch' | 'ZLLSwitch'
+    modelid: s.modelid,
+    manufacturername: s.manufacturername,
+    uniqueid: s.uniqueid,
+    // State varies by sensor type:
+    presence: s.state?.presence ?? null,          // motion sensor
+    temperature: s.state?.temperature ?? null,    // in 1/100 °C → divide by 100
+    lightlevel: s.state?.lightlevel ?? null,      // in lux (10^((val-1)/10000))
+    buttonevent: s.state?.buttonevent ?? null,     // dimmer switch button code
+    lastupdated: s.state?.lastupdated ?? null,
+    // Config
+    on: s.config?.on ?? true,
+    reachable: s.config?.reachable ?? false,
+    battery: s.config?.battery ?? null,
+  }));
+}
+
+export async function fetchSchedules() {
+  const res = await fetch(apiUrl('/schedules'));
+  const data = await res.json();
+  return Object.entries(data).map(([id, s]) => ({
+    id,
+    name: s.name,
+    description: s.description,
+    command: s.command,       // { address, method, body }
+    time: s.time,             // ISO 8601 or "PT00:30:00" (timer) or "W127/T07:00:00" (recurring)
+    localtime: s.localtime,
+    status: s.status,         // 'enabled' | 'disabled'
+    autodelete: s.autodelete,
+    type: s.type,             // 'Timer' | 'Absolute' | 'Recurring'
+  }));
+}
+
+export async function fetchRules() {
+  const res = await fetch(apiUrl('/rules'));
+  const data = await res.json();
+  return Object.entries(data).map(([id, r]) => ({
+    id,
+    name: r.name,
+    conditions: r.conditions ?? [],
+    actions: r.actions ?? [],
+    status: r.status,
+    timestriggered: r.timestriggered ?? 0,
+    lasttriggered: r.lasttriggered,
+  }));
+}
+
+export async function fetchBridgeConfig() {
+  const res = await fetch(apiUrl('/config'));
+  const data = await res.json();
+  return {
+    name: data.name,
+    zigbeechannel: data.zigbeechannel,
+    bridgeid: data.bridgeid,
+    mac: data.mac,
+    ipaddress: data.ipaddress,
+    netmask: data.netmask,
+    gateway: data.gateway,
+    dhcp: data.dhcp,
+    timezone: data.timezone,
+    modelid: data.modelid,
+    swversion: data.swversion,
+    apiversion: data.apiversion,
+    updatestate: data.swupdate2?.state ?? data.swupdate?.updatestate ?? 0,
+    updateavailable: data.swupdate2?.checkforupdate ?? false,
+    linkbutton: data.linkbutton,
+    portalservices: data.portalservices,
+    portalconnection: data.portalconnection,
+    utc: data.UTC,
+    localtime: data.localtime,
+  };
+}
+
+export async function fetchCapabilities() {
+  const res = await fetch(apiUrl('/capabilities'));
+  const data = await res.json();
+  return {
+    lights: data.lights ?? {},
+    groups: data.groups ?? {},
+    scenes: data.scenes ?? {},
+    schedules: data.schedules ?? {},
+    rules: data.rules ?? {},
+    sensors: data.sensors ?? {},
+    streaming: data.streaming ?? {},
+  };
+}
+
+export async function fetchLightDetail(lightId) {
+  const res = await fetch(apiUrl(`/lights/${lightId}`));
+  const data = await res.json();
+  return {
+    id: lightId,
+    productname: data.productname,
+    manufacturername: data.manufacturername,
+    modelid: data.modelid,
+    swversion: data.swversion,
+    uniqueid: data.uniqueid,
+    swconfigid: data.swconfigid,
+    productid: data.productid,
+    capabilities: {
+      certified: data.capabilities?.certified,
+      control: {
+        mindimlevel: data.capabilities?.control?.mindimlevel,
+        maxlumen: data.capabilities?.control?.maxlumen,
+        colorgamuttype: data.capabilities?.control?.colorgamuttype,
+        colorgamut: data.capabilities?.control?.colorgamut,
+        ct: data.capabilities?.control?.ct,       // { min, max }
+      },
+    },
+  };
+}
+
+export async function createSchedule(scheduleData) {
+  const res = await fetch(apiUrl('/schedules'), {
+    method: 'POST',
+    body: JSON.stringify(scheduleData),
+  });
+  const data = await res.json();
+  if (data[0]?.success) return data[0].success.id;
+  throw new Error(data[0]?.error?.description || 'Failed to create schedule');
+}
+
+export async function updateSchedule(id, patch) {
+  await fetch(apiUrl(`/schedules/${id}`), {
+    method: 'PUT',
+    body: JSON.stringify(patch),
+  });
+}
+
+export async function deleteSchedule(id) {
+  await fetch(apiUrl(`/schedules/${id}`), { method: 'DELETE' });
+}
+
 // ─── Real-time polling (SSE not available on local bridge v1) ─────────────────
 export function startPolling(onUpdate, intervalMs = 2000) {
   let active = true;
@@ -222,4 +363,51 @@ export function getStoredConfig() {
 export function clearConfig() {
   localStorage.removeItem('hue_bridge_ip');
   localStorage.removeItem('hue_username');
+}
+
+// ─── Sensor value helpers ─────────────────────────────────────────────────────
+/** Convert Hue temperature sensor value (1/100 °C) to Celsius string */
+export function sensorTempC(raw) {
+  if (raw == null) return null;
+  return (raw / 100).toFixed(1);
+}
+
+/** Convert Hue lightlevel to approximate lux */
+export function sensorLux(lightlevel) {
+  if (lightlevel == null) return null;
+  return Math.round(Math.pow(10, (lightlevel - 1) / 10000));
+}
+
+/** Get sensor type emoji */
+export function sensorEmoji(type) {
+  if (type?.includes('Presence')) return '👁';
+  if (type?.includes('Temperature')) return '🌡';
+  if (type?.includes('LightLevel')) return '☀️';
+  if (type?.includes('Switch')) return '🔘';
+  return '📡';
+}
+
+/** Hue localtime string → human readable */
+export function scheduleTimeLabel(localtime) {
+  if (!localtime) return '';
+  // Timer: PT00:30:00
+  if (localtime.startsWith('PT')) {
+    const match = localtime.match(/PT(\d+):(\d+):(\d+)/);
+    if (match) {
+      const h = parseInt(match[1]);
+      const m = parseInt(match[2]);
+      if (h > 0) return `Over ${h}u ${m}m`;
+      return `Over ${m} min`;
+    }
+  }
+  // Recurring: W127/T07:00:00
+  if (localtime.startsWith('W')) {
+    const parts = localtime.split('/T');
+    if (parts.length === 2) return `Dagelijks om ${parts[1].slice(0, 5)}`;
+  }
+  // Absolute: 2026-03-06T07:00:00
+  try {
+    const d = new Date(localtime);
+    return d.toLocaleString('nl-NL', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+  } catch { return localtime; }
 }

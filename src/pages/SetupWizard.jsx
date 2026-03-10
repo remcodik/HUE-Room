@@ -1,10 +1,17 @@
 import { useState, useEffect } from 'react';
-import { discoverBridges, pairWithBridge, fetchLights, fetchGroups, fetchScenes } from '../services/hue';
+import {
+  discoverBridges, pairWithBridge, fetchLights, fetchGroups, fetchScenes,
+  getOAuthUrl, saveClientId, getClientId,
+} from '../services/hue';
 import { useHueStore } from '../store/useHueStore';
 
 const STEPS = ['discover', 'press', 'done'];
 
 export default function SetupWizard() {
+  // 'local' | 'remote'
+  const [mode, setMode] = useState('local');
+
+  // Local bridge state
   const [step, setStep] = useState('discover');
   const [bridges, setBridges] = useState([]);
   const [selectedBridge, setSelectedBridge] = useState(null);
@@ -13,11 +20,14 @@ export default function SetupWizard() {
   const [error, setError] = useState(null);
   const [pairing, setPairing] = useState(false);
 
+  // Remote API state
+  const [clientId, setClientId] = useState(getClientId() || '');
+
   const { setConnection, setLights, setGroups, setScenes, startPolling } = useHueStore();
 
   useEffect(() => {
-    discover();
-  }, []);
+    if (mode === 'local') discover();
+  }, [mode]);
 
   const discover = async () => {
     setLoading(true);
@@ -25,9 +35,7 @@ export default function SetupWizard() {
     try {
       const found = await discoverBridges();
       setBridges(found.filter(b => b.ip));
-      if (found.length === 1 && found[0].ip) {
-        setSelectedBridge(found[0]);
-      }
+      if (found.length === 1 && found[0].ip) setSelectedBridge(found[0]);
     } catch {
       setError('Zoekopdracht mislukt. Voer IP-adres handmatig in.');
     } finally {
@@ -38,22 +46,15 @@ export default function SetupWizard() {
   const handlePair = async () => {
     const ip = selectedBridge?.ip || manualIp.trim();
     if (!ip) { setError('Voer een IP-adres in'); return; }
-
     setStep('press');
     setError(null);
-
-    // Poll for button press
     let attempts = 0;
-    const maxAttempts = 30;
-
     const tryPair = async () => {
       attempts++;
       setPairing(true);
       try {
         const result = await pairWithBridge(ip);
         setConnection(result.ip, result.username);
-
-        // Load initial data
         const [lights, groups, scenes] = await Promise.all([
           fetchLights(), fetchGroups(), fetchScenes(),
         ]);
@@ -63,7 +64,7 @@ export default function SetupWizard() {
         startPolling();
         setStep('done');
       } catch (e) {
-        if (e.message === 'PRESS_BUTTON' && attempts < maxAttempts) {
+        if (e.message === 'PRESS_BUTTON' && attempts < 30) {
           setTimeout(tryPair, 2000);
         } else {
           setError(e.message || 'Koppeling mislukt');
@@ -72,8 +73,13 @@ export default function SetupWizard() {
         }
       }
     };
-
     tryPair();
+  };
+
+  const handleRemoteLogin = () => {
+    if (!clientId.trim()) { setError('Voer je Client ID in'); return; }
+    saveClientId(clientId.trim());
+    window.location.href = getOAuthUrl(clientId.trim());
   };
 
   return (
@@ -87,133 +93,215 @@ export default function SetupWizard() {
         <p className="text-slate-400 text-sm mt-1">Plattegrond lichtbediening</p>
       </div>
 
-      {/* Steps */}
-      <div className="flex gap-2 mb-8">
-        {['Verbinden', 'Koppelen', 'Klaar'].map((label, i) => {
-          const stepName = STEPS[i];
-          const active = step === stepName;
-          const done = STEPS.indexOf(step) > i;
-          return (
-            <div key={label} className="flex items-center gap-2">
-              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                done ? 'bg-green-500 text-white' : active ? 'bg-amber-400 text-slate-900' : 'bg-slate-800 text-slate-500'
-              }`}>
-                {done ? '✓' : i + 1}
-              </div>
-              <span className={`text-xs ${active ? 'text-white' : 'text-slate-500'}`}>{label}</span>
-              {i < 2 && <span className="text-slate-700 text-xs mx-1">—</span>}
-            </div>
-          );
-        })}
+      {/* Mode toggle */}
+      <div className="flex gap-2 mb-6 bg-slate-800/60 rounded-2xl p-1.5">
+        <button
+          onClick={() => { setMode('local'); setError(null); }}
+          className={`flex-1 py-2 px-4 rounded-xl text-sm font-medium transition-all ${
+            mode === 'local'
+              ? 'bg-amber-400 text-slate-900'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          🏠 Thuis (lokaal)
+        </button>
+        <button
+          onClick={() => { setMode('remote'); setError(null); }}
+          className={`flex-1 py-2 px-4 rounded-xl text-sm font-medium transition-all ${
+            mode === 'remote'
+              ? 'bg-amber-400 text-slate-900'
+              : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          🌍 Overal (remote)
+        </button>
       </div>
 
-      {/* Content card */}
-      <div className="w-full max-w-sm bg-slate-800/50 backdrop-blur-sm rounded-3xl border border-slate-700/50 p-6">
+      {/* ── LOCAL MODE ── */}
+      {mode === 'local' && (
+        <>
+          {/* Steps */}
+          <div className="flex gap-2 mb-8">
+            {['Verbinden', 'Koppelen', 'Klaar'].map((label, i) => {
+              const stepName = STEPS[i];
+              const active = step === stepName;
+              const done = STEPS.indexOf(step) > i;
+              return (
+                <div key={label} className="flex items-center gap-2">
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                    done ? 'bg-green-500 text-white' : active ? 'bg-amber-400 text-slate-900' : 'bg-slate-800 text-slate-500'
+                  }`}>
+                    {done ? '✓' : i + 1}
+                  </div>
+                  <span className={`text-xs ${active ? 'text-white' : 'text-slate-500'}`}>{label}</span>
+                  {i < 2 && <span className="text-slate-700 text-xs mx-1">—</span>}
+                </div>
+              );
+            })}
+          </div>
 
-        {step === 'discover' && (
-          <div className="space-y-4">
-            <h2 className="text-white font-semibold text-base">Hue Bridge zoeken</h2>
-            <p className="text-slate-400 text-sm">Zorg dat uw Hue Bridge verbonden is met hetzelfde netwerk.</p>
+          <div className="w-full max-w-sm bg-slate-800/50 backdrop-blur-sm rounded-3xl border border-slate-700/50 p-6">
+            {step === 'discover' && (
+              <div className="space-y-4">
+                <h2 className="text-white font-semibold text-base">Hue Bridge zoeken</h2>
+                <p className="text-slate-400 text-sm">Zorg dat uw Hue Bridge verbonden is met hetzelfde netwerk.</p>
 
-            {loading ? (
-              <div className="flex items-center gap-3 py-4">
-                <div className="w-5 h-5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
-                <span className="text-slate-400 text-sm">Zoeken naar bridges...</span>
-              </div>
-            ) : bridges.length > 0 ? (
-              <div className="space-y-2">
-                {bridges.map(b => (
-                  <button
-                    key={b.id}
-                    onClick={() => setSelectedBridge(b)}
-                    className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all ${
-                      selectedBridge?.id === b.id
-                        ? 'border-amber-400 bg-amber-400/10'
-                        : 'border-slate-700 bg-slate-800'
-                    }`}
-                  >
-                    <div className="w-8 h-8 rounded-lg bg-slate-700 flex items-center justify-center text-lg">🌉</div>
-                    <div className="text-left">
-                      <p className="text-sm text-white font-medium">Hue Bridge</p>
-                      <p className="text-xs text-slate-400">{b.ip}</p>
-                    </div>
-                    {selectedBridge?.id === b.id && <span className="ml-auto text-amber-400">✓</span>}
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <div>
-                <p className="text-xs text-slate-500 mb-2">Geen bridge gevonden. Handmatig IP:</p>
-                <input
-                  value={manualIp}
-                  onChange={e => setManualIp(e.target.value)}
-                  placeholder="192.168.1.x"
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-amber-400"
-                />
+                {loading ? (
+                  <div className="flex items-center gap-3 py-4">
+                    <div className="w-5 h-5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                    <span className="text-slate-400 text-sm">Zoeken naar bridges...</span>
+                  </div>
+                ) : bridges.length > 0 ? (
+                  <div className="space-y-2">
+                    {bridges.map(b => (
+                      <button
+                        key={b.id}
+                        onClick={() => setSelectedBridge(b)}
+                        className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all ${
+                          selectedBridge?.id === b.id
+                            ? 'border-amber-400 bg-amber-400/10'
+                            : 'border-slate-700 bg-slate-800'
+                        }`}
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-slate-700 flex items-center justify-center text-lg">🌉</div>
+                        <div className="text-left">
+                          <p className="text-sm text-white font-medium">Hue Bridge</p>
+                          <p className="text-xs text-slate-400">{b.ip}</p>
+                        </div>
+                        {selectedBridge?.id === b.id && <span className="ml-auto text-amber-400">✓</span>}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div>
+                    <p className="text-xs text-slate-500 mb-2">Geen bridge gevonden. Handmatig IP:</p>
+                    <input
+                      value={manualIp}
+                      onChange={e => setManualIp(e.target.value)}
+                      placeholder="192.168.1.x"
+                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-amber-400"
+                    />
+                    <button onClick={discover} className="mt-2 text-xs text-amber-400 underline">
+                      Opnieuw zoeken
+                    </button>
+                  </div>
+                )}
+
+                {error && <p className="text-red-400 text-xs">{error}</p>}
+
                 <button
-                  onClick={discover}
-                  className="mt-2 text-xs text-amber-400 underline"
+                  onClick={handlePair}
+                  disabled={!selectedBridge && !manualIp.trim()}
+                  className="w-full py-3.5 bg-gradient-to-r from-amber-400 to-orange-400 text-slate-900 font-semibold rounded-xl disabled:opacity-40 disabled:cursor-not-allowed active:scale-98 transition-all"
                 >
-                  Opnieuw zoeken
+                  Verbinden →
                 </button>
               </div>
             )}
+
+            {step === 'press' && (
+              <div className="text-center space-y-4 py-2">
+                <div className="relative mx-auto w-24 h-24">
+                  <div className="absolute inset-0 rounded-full bg-amber-400/20 animate-ping" />
+                  <div className="relative w-24 h-24 rounded-full bg-gradient-to-br from-amber-400 to-orange-400 flex items-center justify-center shadow-lg">
+                    <span className="text-4xl">🔘</span>
+                  </div>
+                </div>
+                <h2 className="text-white font-semibold text-lg">Druk op de knop</h2>
+                <p className="text-slate-400 text-sm leading-relaxed">
+                  Druk nu op de grote ronde knop op uw <strong className="text-white">Philips Hue Bridge</strong>.
+                </p>
+                {error && (
+                  <div>
+                    <p className="text-red-400 text-xs">{error}</p>
+                    <button onClick={() => setStep('discover')} className="mt-2 text-amber-400 text-xs underline">
+                      Probeer opnieuw
+                    </button>
+                  </div>
+                )}
+                <div className="flex items-center justify-center gap-2 text-slate-500 text-xs">
+                  <div className="w-3 h-3 border border-slate-500 border-t-amber-400 rounded-full animate-spin" />
+                  Wachten op koppeling...
+                </div>
+              </div>
+            )}
+
+            {step === 'done' && (
+              <div className="text-center space-y-4 py-2">
+                <div className="w-16 h-16 rounded-full bg-green-500/20 border-2 border-green-500 flex items-center justify-center mx-auto text-3xl">
+                  ✓
+                </div>
+                <h2 className="text-white font-semibold text-lg">Verbonden!</h2>
+                <p className="text-slate-400 text-sm">Uw Hue Bridge is gekoppeld.</p>
+                <div className="w-5 h-5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin mx-auto" />
+              </div>
+            )}
+          </div>
+
+          <p className="text-slate-600 text-xs mt-8 text-center">
+            Werkt op hetzelfde WiFi-netwerk als de bridge
+          </p>
+        </>
+      )}
+
+      {/* ── REMOTE MODE ── */}
+      {mode === 'remote' && (
+        <div className="w-full max-w-sm space-y-4">
+          <div className="bg-slate-800/50 backdrop-blur-sm rounded-3xl border border-slate-700/50 p-6 space-y-5">
+            <div className="text-center">
+              <div className="text-3xl mb-2">🌍</div>
+              <h2 className="text-white font-semibold text-base">Remote toegang</h2>
+              <p className="text-slate-400 text-sm mt-1">
+                Bedien uw lampen van overal via de Philips Hue cloud.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs text-slate-400 font-medium">Client ID</label>
+              <input
+                value={clientId}
+                onChange={e => setClientId(e.target.value)}
+                placeholder="Uw Hue developer Client ID"
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-amber-400 font-mono"
+              />
+              <p className="text-xs text-slate-500">
+                Aanmaken via{' '}
+                <span className="text-amber-400">developers.meethue.com</span>
+                {' '}→ Create App
+              </p>
+            </div>
 
             {error && <p className="text-red-400 text-xs">{error}</p>}
 
             <button
-              onClick={handlePair}
-              disabled={!selectedBridge && !manualIp.trim()}
+              onClick={handleRemoteLogin}
+              disabled={!clientId.trim()}
               className="w-full py-3.5 bg-gradient-to-r from-amber-400 to-orange-400 text-slate-900 font-semibold rounded-xl disabled:opacity-40 disabled:cursor-not-allowed active:scale-98 transition-all"
             >
-              Verbinden →
+              Inloggen met Hue account →
             </button>
           </div>
-        )}
 
-        {step === 'press' && (
-          <div className="text-center space-y-4 py-2">
-            <div className="relative mx-auto w-24 h-24">
-              <div className="absolute inset-0 rounded-full bg-amber-400/20 animate-ping" />
-              <div className="relative w-24 h-24 rounded-full bg-gradient-to-br from-amber-400 to-orange-400 flex items-center justify-center shadow-lg">
-                <span className="text-4xl">🔘</span>
+          {/* Setup instructies */}
+          <div className="bg-slate-800/30 rounded-2xl border border-slate-700/30 p-4 space-y-3">
+            <p className="text-xs text-slate-400 font-semibold uppercase tracking-wide">Eenmalige setup</p>
+            {[
+              { n: '1', text: 'Ga naar developers.meethue.com → Inloggen' },
+              { n: '2', text: 'Klik "Create App" → vul naam in → kies "Remote API"' },
+              { n: '3', text: 'Kopieer de Client ID en plak hierboven' },
+              { n: '4', text: 'Stel in Vercel de env vars HUE_CLIENT_ID en HUE_CLIENT_SECRET in' },
+              { n: '5', text: 'Klik "Inloggen met Hue account" en geef toestemming' },
+            ].map(({ n, text }) => (
+              <div key={n} className="flex gap-3">
+                <div className="w-5 h-5 rounded-full bg-amber-400/20 text-amber-400 text-xs flex items-center justify-center flex-shrink-0 mt-0.5">
+                  {n}
+                </div>
+                <p className="text-xs text-slate-400 leading-relaxed">{text}</p>
               </div>
-            </div>
-            <h2 className="text-white font-semibold text-lg">Druk op de knop</h2>
-            <p className="text-slate-400 text-sm leading-relaxed">
-              Druk nu op de grote ronde knop op uw <strong className="text-white">Philips Hue Bridge</strong> om de koppeling toe te staan.
-            </p>
-            {error && (
-              <div>
-                <p className="text-red-400 text-xs">{error}</p>
-                <button onClick={() => setStep('discover')} className="mt-2 text-amber-400 text-xs underline">
-                  Probeer opnieuw
-                </button>
-              </div>
-            )}
-            <div className="flex items-center justify-center gap-2 text-slate-500 text-xs">
-              <div className="w-3 h-3 border border-slate-500 border-t-amber-400 rounded-full animate-spin" />
-              Wachten op koppeling...
-            </div>
+            ))}
           </div>
-        )}
-
-        {step === 'done' && (
-          <div className="text-center space-y-4 py-2">
-            <div className="w-16 h-16 rounded-full bg-green-500/20 border-2 border-green-500 flex items-center justify-center mx-auto text-3xl">
-              ✓
-            </div>
-            <h2 className="text-white font-semibold text-lg">Verbonden!</h2>
-            <p className="text-slate-400 text-sm">Uw Hue Bridge is gekoppeld. U kunt nu uw plattegrond instellen.</p>
-            <div className="w-5 h-5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin mx-auto" />
-          </div>
-        )}
-      </div>
-
-      {/* Footer */}
-      <p className="text-slate-600 text-xs mt-8 text-center">
-        Werkt op hetzelfde WiFi-netwerk als de bridge
-      </p>
+        </div>
+      )}
     </div>
   );
 }

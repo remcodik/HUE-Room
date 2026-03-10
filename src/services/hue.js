@@ -43,7 +43,7 @@ export async function pairWithBridge(ip) {
   throw new Error(data[0]?.error?.description || 'Pairing failed');
 }
 
-// ─── API client ───────────────────────────────────────────────────────────────
+// ─── API client (local + remote) ─────────────────────────────────────────────
 function getConfig() {
   return {
     ip: load('hue_bridge_ip'),
@@ -53,11 +53,29 @@ function getConfig() {
 
 function apiUrl(path) {
   const { ip, username } = getConfig();
+  if (isRemoteMode()) {
+    return `${REMOTE_BASE}/bridge/${username}${path}`;
+  }
   return `http://${ip}/api/${username}${path}`;
 }
 
+async function apiFetch(path, options = {}) {
+  if (isRemoteMode()) {
+    const token = await getValidRemoteToken();
+    return fetch(apiUrl(path), {
+      ...options,
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    });
+  }
+  return fetch(apiUrl(path), options);
+}
+
 export async function fetchLights() {
-  const res = await fetch(apiUrl('/lights'));
+  const res = await apiFetch('/lights');
   const data = await res.json();
   return Object.entries(data).map(([id, light]) => ({
     id,
@@ -75,7 +93,7 @@ export async function fetchLights() {
 }
 
 export async function fetchGroups() {
-  const res = await fetch(apiUrl('/groups'));
+  const res = await apiFetch('/groups');
   const data = await res.json();
   return Object.entries(data).map(([id, g]) => ({
     id,
@@ -92,7 +110,7 @@ export async function fetchGroups() {
 }
 
 export async function fetchScenes() {
-  const res = await fetch(apiUrl('/scenes'));
+  const res = await apiFetch('/scenes');
   const data = await res.json();
   return Object.entries(data).map(([id, s]) => ({
     id,
@@ -103,21 +121,21 @@ export async function fetchScenes() {
 }
 
 export async function setLightState(lightId, state) {
-  await fetch(apiUrl(`/lights/${lightId}/state`), {
+  await apiFetch(`/lights/${lightId}/state`, {
     method: 'PUT',
     body: JSON.stringify(state),
   });
 }
 
 export async function setGroupState(groupId, state) {
-  await fetch(apiUrl(`/groups/${groupId}/action`), {
+  await apiFetch(`/groups/${groupId}/action`, {
     method: 'PUT',
     body: JSON.stringify(state),
   });
 }
 
 export async function activateScene(sceneId, groupId) {
-  await fetch(apiUrl(`/groups/${groupId}/action`), {
+  await apiFetch(`/groups/${groupId}/action`, {
     method: 'PUT',
     body: JSON.stringify({ scene: sceneId }),
   });
@@ -126,7 +144,7 @@ export async function activateScene(sceneId, groupId) {
 // ─── Extended API endpoints ───────────────────────────────────────────────────
 
 export async function fetchSensors() {
-  const res = await fetch(apiUrl('/sensors'));
+  const res = await apiFetch('/sensors');
   const data = await res.json();
   return Object.entries(data).map(([id, s]) => ({
     id,
@@ -149,7 +167,7 @@ export async function fetchSensors() {
 }
 
 export async function fetchSchedules() {
-  const res = await fetch(apiUrl('/schedules'));
+  const res = await apiFetch('/schedules');
   const data = await res.json();
   return Object.entries(data).map(([id, s]) => ({
     id,
@@ -165,7 +183,7 @@ export async function fetchSchedules() {
 }
 
 export async function fetchRules() {
-  const res = await fetch(apiUrl('/rules'));
+  const res = await apiFetch('/rules');
   const data = await res.json();
   return Object.entries(data).map(([id, r]) => ({
     id,
@@ -179,7 +197,7 @@ export async function fetchRules() {
 }
 
 export async function fetchBridgeConfig() {
-  const res = await fetch(apiUrl('/config'));
+  const res = await apiFetch('/config');
   const data = await res.json();
   return {
     name: data.name,
@@ -205,7 +223,7 @@ export async function fetchBridgeConfig() {
 }
 
 export async function fetchCapabilities() {
-  const res = await fetch(apiUrl('/capabilities'));
+  const res = await apiFetch('/capabilities');
   const data = await res.json();
   return {
     lights: data.lights ?? {},
@@ -219,7 +237,7 @@ export async function fetchCapabilities() {
 }
 
 export async function fetchLightDetail(lightId) {
-  const res = await fetch(apiUrl(`/lights/${lightId}`));
+  const res = await apiFetch(`/lights/${lightId}`);
   const data = await res.json();
   return {
     id: lightId,
@@ -244,7 +262,7 @@ export async function fetchLightDetail(lightId) {
 }
 
 export async function createSchedule(scheduleData) {
-  const res = await fetch(apiUrl('/schedules'), {
+  const res = await apiFetch('/schedules', {
     method: 'POST',
     body: JSON.stringify(scheduleData),
   });
@@ -254,14 +272,14 @@ export async function createSchedule(scheduleData) {
 }
 
 export async function updateSchedule(id, patch) {
-  await fetch(apiUrl(`/schedules/${id}`), {
+  await apiFetch(`/schedules/${id}`, {
     method: 'PUT',
     body: JSON.stringify(patch),
   });
 }
 
 export async function deleteSchedule(id) {
-  await fetch(apiUrl(`/schedules/${id}`), { method: 'DELETE' });
+  await apiFetch(`/schedules/${id}`, { method: 'DELETE' });
 }
 
 // ─── Real-time polling (SSE not available on local bridge v1) ─────────────────
@@ -353,7 +371,13 @@ export function hexToXY(hex) {
 
 // ─── Saved config helpers ─────────────────────────────────────────────────────
 export function isConfigured() {
-  return !!(load('hue_bridge_ip') && load('hue_username'));
+  // Local bridge OR remote OAuth
+  return !!(load('hue_bridge_ip') && load('hue_username'))
+    || !!(load('hue_remote_token') && load('hue_username'));
+}
+
+export function isRemoteMode() {
+  return !!load('hue_remote_token');
 }
 
 export function getStoredConfig() {
@@ -363,7 +387,117 @@ export function getStoredConfig() {
 export function clearConfig() {
   localStorage.removeItem('hue_bridge_ip');
   localStorage.removeItem('hue_username');
+  localStorage.removeItem('hue_remote_token');
+  localStorage.removeItem('hue_remote_refresh');
+  localStorage.removeItem('hue_remote_expires');
+  localStorage.removeItem('hue_client_id');
 }
+
+// ─── Remote API (Philips Hue Cloud) ───────────────────────────────────────────
+const REMOTE_BASE = 'https://api.meethue.com';
+
+export function saveRemoteTokens({ access_token, refresh_token, expires_in }) {
+  save('hue_remote_token', access_token);
+  if (refresh_token) save('hue_remote_refresh', refresh_token);
+  if (expires_in) save('hue_remote_expires', Date.now() + expires_in * 1000);
+}
+
+export function getRemoteToken() {
+  return load('hue_remote_token');
+}
+
+export function saveClientId(clientId) {
+  save('hue_client_id', clientId);
+}
+
+export function getClientId() {
+  return load('hue_client_id');
+}
+
+/** Redirect URL the browser should return to after Hue login */
+export function getOAuthRedirectUri() {
+  return window.location.origin + '/';
+}
+
+/** Build the Hue authorization URL – redirects user to Hue login page */
+export function getOAuthUrl(clientId) {
+  const state = Math.random().toString(36).slice(2);
+  sessionStorage.setItem('hue_oauth_state', state);
+  const params = new URLSearchParams({
+    client_id: clientId,
+    response_type: 'code',
+    state,
+  });
+  return `${REMOTE_BASE}/v2/oauth2/authorize?${params}`;
+}
+
+/**
+ * Exchange authorization code for tokens.
+ * Calls /api/token (Vercel serverless) to avoid CORS issues with client_secret.
+ */
+export async function exchangeOAuthCode(code, clientId) {
+  const res = await fetch(`/api/token?code=${encodeURIComponent(code)}&client_id=${encodeURIComponent(clientId)}&grant_type=authorization_code`);
+  if (!res.ok) throw new Error('Token uitwisseling mislukt');
+  const data = await res.json();
+  if (!data.access_token) throw new Error(data.error_description || 'Geen access token');
+  return data;
+}
+
+/**
+ * Refresh the access token using the stored refresh token.
+ */
+export async function refreshRemoteToken() {
+  const refreshToken = load('hue_remote_refresh');
+  const clientId = load('hue_client_id');
+  if (!refreshToken || !clientId) throw new Error('Geen refresh token');
+  const res = await fetch(`/api/token?refresh_token=${encodeURIComponent(refreshToken)}&client_id=${encodeURIComponent(clientId)}&grant_type=refresh_token`);
+  if (!res.ok) throw new Error('Token vernieuwen mislukt');
+  const data = await res.json();
+  if (!data.access_token) throw new Error('Geen access token');
+  saveRemoteTokens(data);
+  return data.access_token;
+}
+
+/**
+ * Get a valid access token, refreshing if needed.
+ */
+export async function getValidRemoteToken() {
+  const expires = load('hue_remote_expires');
+  if (expires && Date.now() > expires - 60000) {
+    return await refreshRemoteToken();
+  }
+  return load('hue_remote_token');
+}
+
+/**
+ * After OAuth: link bridge to get/confirm the whitelist username.
+ * With Remote API, username = the stored API key.
+ * This creates a whitelist entry if not yet done.
+ */
+export async function linkRemoteBridge(accessToken) {
+  // Try to create whitelist entry (press link button is NOT required for Remote API)
+  const res = await fetch(`${REMOTE_BASE}/bridge/0/config`, {
+    method: 'PUT',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ devicetype: HUE_APP_NAME }),
+  });
+  const data = await res.json();
+  // The response contains the whitelist username
+  if (Array.isArray(data) && data[0]?.success?.username) {
+    return data[0].success.username;
+  }
+  // Fallback: try fetching existing whitelist
+  if (data.whitelist) {
+    const firstKey = Object.keys(data.whitelist)[0];
+    if (firstKey) return firstKey;
+  }
+  throw new Error('Bridge koppeling mislukt – probeer opnieuw');
+}
+
+// ─── API client (local + remote) ─────────────────────────────────────────────
 
 // ─── Sensor value helpers ─────────────────────────────────────────────────────
 /** Convert Hue temperature sensor value (1/100 °C) to Celsius string */

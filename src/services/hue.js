@@ -411,7 +411,7 @@ export function saveClientId(clientId) {
 }
 
 export function getClientId() {
-  return load('hue_client_id');
+  return load('hue_client_id') || import.meta.env.VITE_HUE_CLIENT_ID || '';
 }
 
 /** Redirect URL the browser should return to after Hue login */

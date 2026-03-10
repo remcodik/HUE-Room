@@ -22,7 +22,7 @@ export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const { grant_type, code, refresh_token, redirect_uri } = req.method === 'POST'
+  const { grant_type, code, refresh_token } = req.method === 'POST'
     ? req.body
     : req.query;
 
@@ -34,7 +34,6 @@ export default async function handler(req, res) {
   if (grant_type === 'authorization_code') {
     if (!code) return res.status(400).json({ error: 'code is verplicht' });
     body.append('code', code);
-    if (redirect_uri) body.append('redirect_uri', redirect_uri);
   } else if (grant_type === 'refresh_token') {
     if (!refresh_token) return res.status(400).json({ error: 'refresh_token is verplicht' });
     body.append('refresh_token', refresh_token);

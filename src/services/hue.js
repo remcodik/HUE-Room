@@ -436,8 +436,7 @@ export function getOAuthUrl(clientId) {
  * Calls /api/token (Vercel serverless) to avoid CORS issues with client_secret.
  */
 export async function exchangeOAuthCode(code, clientId) {
-  const redirectUri = getOAuthRedirectUri();
-  const res = await fetch(`/api/token?code=${encodeURIComponent(code)}&client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&grant_type=authorization_code`);
+  const res = await fetch(`/api/token?code=${encodeURIComponent(code)}&client_id=${encodeURIComponent(clientId)}&grant_type=authorization_code`);
   if (!res.ok) {
     let detail = '';
     try { const d = await res.json(); detail = d.error_description || d.error || ''; } catch {}

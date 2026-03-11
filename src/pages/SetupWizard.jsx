@@ -128,6 +128,14 @@ export default function SetupWizard() {
       {/* ── LOCAL MODE ── */}
       {mode === 'local' && (
         <>
+          {/* HTTPS mixed-content waarschuwing */}
+          {window.location.protocol === 'https:' && (
+            <div className="w-full max-w-sm mb-4 bg-orange-500/10 border border-orange-500/40 rounded-2xl p-4">
+              <p className="text-orange-300 text-xs leading-relaxed">
+                <strong>Let op:</strong> Lokale modus werkt niet via HTTPS. Gebruik <strong>Overal (remote)</strong> of open de app via <code>http://</code> op je eigen netwerk.
+              </p>
+            </div>
+          )}
           {/* Steps */}
           <div className="flex gap-2 mb-8">
             {['Verbinden', 'Koppelen', 'Klaar'].map((label, i) => {

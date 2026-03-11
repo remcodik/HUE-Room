@@ -433,6 +433,7 @@ export function getOAuthUrl(clientId) {
     client_id: clientId,
     response_type: 'code',
     state,
+    redirect_uri: getOAuthRedirectUri(),
   });
   return `${REMOTE_BASE}/v2/oauth2/authorize?${params}`;
 }
@@ -442,7 +443,7 @@ export function getOAuthUrl(clientId) {
  * Calls /api/token (Vercel serverless) to avoid CORS issues with client_secret.
  */
 export async function exchangeOAuthCode(code, clientId) {
-  const res = await fetch(`/api/token?code=${encodeURIComponent(code)}&client_id=${encodeURIComponent(clientId)}&grant_type=authorization_code`);
+  const res = await fetch(`/api/token?code=${encodeURIComponent(code)}&client_id=${encodeURIComponent(clientId)}&grant_type=authorization_code&redirect_uri=${encodeURIComponent(getOAuthRedirectUri())}`);
   if (!res.ok) {
     let detail = '';
     try { const d = await res.json(); detail = d.error_description || d.error || ''; } catch {}

@@ -49,9 +49,11 @@ export default defineConfig(({ mode }) => {
             const grant_type = url.searchParams.get('grant_type')
             const code = url.searchParams.get('code')
             const refresh_token = url.searchParams.get('refresh_token')
+            const redirect_uri = url.searchParams.get('redirect_uri')
 
             const body = new URLSearchParams({ grant_type })
             if (grant_type === 'authorization_code' && code) body.append('code', code)
+            if (grant_type === 'authorization_code' && redirect_uri) body.append('redirect_uri', redirect_uri)
             if (grant_type === 'refresh_token' && refresh_token) body.append('refresh_token', refresh_token)
 
             try {

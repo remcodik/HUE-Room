@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   discoverBridges, pairWithBridge, fetchLights, fetchGroups, fetchScenes,
-  getOAuthUrl, saveClientId, getClientId,
+  getOAuthUrl, saveClientId, getClientId, getOAuthRedirectUri,
 } from '../services/hue';
 import { useHueStore } from '../store/useHueStore';
 
@@ -298,15 +298,30 @@ export default function SetupWizard() {
             </button>
           </div>
 
+          {/* Redirect URI tonen */}
+          <div className="bg-slate-800/30 rounded-2xl border border-amber-500/20 p-4 space-y-2">
+            <p className="text-xs text-amber-400 font-semibold uppercase tracking-wide">Verplicht in Hue App registreren</p>
+            <p className="text-xs text-slate-400">Voeg deze <strong className="text-white">Callback URL</strong> toe in je Hue developer app:</p>
+            <div className="flex items-center gap-2 bg-slate-900 rounded-lg px-3 py-2">
+              <code className="text-xs text-amber-300 break-all flex-1">{getOAuthRedirectUri()}</code>
+              <button
+                onClick={() => navigator.clipboard.writeText(getOAuthRedirectUri())}
+                className="text-slate-500 hover:text-white text-xs flex-shrink-0"
+                title="Kopieer"
+              >📋</button>
+            </div>
+          </div>
+
           {/* Setup instructies */}
           <div className="bg-slate-800/30 rounded-2xl border border-slate-700/30 p-4 space-y-3">
             <p className="text-xs text-slate-400 font-semibold uppercase tracking-wide">Eenmalige setup</p>
             {[
               { n: '1', text: 'Ga naar developers.meethue.com → Inloggen' },
               { n: '2', text: 'Klik "Create App" → vul naam in → kies "Remote API"' },
-              { n: '3', text: 'Kopieer de Client ID en plak hierboven' },
-              { n: '4', text: 'Stel in Vercel de env vars HUE_CLIENT_ID en HUE_CLIENT_SECRET in' },
-              { n: '5', text: 'Klik "Inloggen met Hue account" en geef toestemming' },
+              { n: '3', text: 'Plak de Callback URL hierboven in het "Callback URL" veld' },
+              { n: '4', text: 'Kopieer de Client ID en plak die hierboven' },
+              { n: '5', text: 'Stel in Vercel de env vars HUE_CLIENT_ID en HUE_CLIENT_SECRET in' },
+              { n: '6', text: 'Klik "Inloggen met Hue account" en geef toestemming' },
             ].map(({ n, text }) => (
               <div key={n} className="flex gap-3">
                 <div className="w-5 h-5 rounded-full bg-amber-400/20 text-amber-400 text-xs flex items-center justify-center flex-shrink-0 mt-0.5">

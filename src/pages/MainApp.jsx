@@ -5,6 +5,7 @@ import FloorPlan from '../components/FloorPlan';
 import RoomEditor from '../components/RoomEditor';
 import ScenePanel from '../components/ScenePanel';
 import LightControls from '../components/LightControls';
+import ShortcutsGuide from '../components/ShortcutsGuide';
 
 export default function MainApp() {
   const {
@@ -19,6 +20,7 @@ export default function MainApp() {
   const [editingRoom, setEditingRoom] = useState(null);
   const [showScenes, setShowScenes] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
   const [selectedLightId, setSelectedLightId] = useState(null);
 
   const activeRoom = rooms.find(r => r.id === activeRoomId) || rooms[0] || null;
@@ -69,6 +71,14 @@ export default function MainApp() {
         <div className="flex-1" />
 
         {/* Quick actions */}
+        <button
+          onClick={() => setShowShortcuts(true)}
+          className="w-9 h-9 flex items-center justify-center bg-slate-800 rounded-xl border border-slate-700 text-base"
+          title="iPhone Opdrachten"
+        >
+          🔗
+        </button>
+
         <button
           onClick={() => setShowScenes(true)}
           className="w-9 h-9 flex items-center justify-center bg-slate-800 rounded-xl border border-slate-700 text-base"
@@ -231,6 +241,12 @@ export default function MainApp() {
           lightId={selectedLightId}
           onClose={() => setSelectedLightId(null)}
         />
+      )}
+
+      {showShortcuts && (
+        <div className="absolute inset-0 bg-slate-950 z-50">
+          <ShortcutsGuide onClose={() => setShowShortcuts(false)} />
+        </div>
       )}
     </div>
   );

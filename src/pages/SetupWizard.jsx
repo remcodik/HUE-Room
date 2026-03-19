@@ -6,10 +6,11 @@ import {
 import { useHueStore } from '../store/useHueStore';
 
 const STEPS = ['discover', 'press', 'done'];
+const IS_HTTPS = window.location.protocol === 'https:';
 
 export default function SetupWizard() {
   // 'local' | 'remote'
-  const [mode, setMode] = useState('local');
+  const [mode, setMode] = useState(IS_HTTPS ? 'remote' : 'local');
 
   // Local bridge state
   const [step, setStep] = useState('discover');
@@ -125,17 +126,26 @@ export default function SetupWizard() {
         </button>
       </div>
 
+      {/* ── HTTPS waarschuwing (altijd zichtbaar in local mode) ── */}
+      {mode === 'local' && IS_HTTPS && (
+        <div className="w-full max-w-sm mb-4 bg-orange-500/10 border border-orange-500 rounded-2xl p-4 space-y-3">
+          <p className="text-orange-300 text-sm font-semibold">🔒 Lokale modus werkt niet via HTTPS</p>
+          <p className="text-orange-200/80 text-xs leading-relaxed">
+            Je browser blokkeert verbindingen met de bridge omdat de app via HTTPS wordt geladen.
+            Gebruik <strong>Remote modus</strong> of open de app via <code className="bg-orange-900/40 px-1 rounded">http://</code> op je thuisnetwerk.
+          </p>
+          <button
+            onClick={() => { setMode('remote'); setError(null); }}
+            className="w-full py-2.5 bg-orange-500 text-white font-semibold rounded-xl text-sm"
+          >
+            Overschakelen naar Remote modus →
+          </button>
+        </div>
+      )}
+
       {/* ── LOCAL MODE ── */}
       {mode === 'local' && (
         <>
-          {/* HTTPS mixed-content waarschuwing */}
-          {window.location.protocol === 'https:' && (
-            <div className="w-full max-w-sm mb-4 bg-orange-500/10 border border-orange-500/40 rounded-2xl p-4">
-              <p className="text-orange-300 text-xs leading-relaxed">
-                <strong>Let op:</strong> Lokale modus werkt niet via HTTPS. Gebruik <strong>Overal (remote)</strong> of open de app via <code>http://</code> op je eigen netwerk.
-              </p>
-            </div>
-          )}
           {/* Steps */}
           <div className="flex gap-2 mb-8">
             {['Verbinden', 'Koppelen', 'Klaar'].map((label, i) => {
@@ -263,13 +273,35 @@ export default function SetupWizard() {
       {/* ── REMOTE MODE ── */}
       {mode === 'remote' && (
         <div className="w-full max-w-sm space-y-4">
-          <div className="bg-slate-800/50 backdrop-blur-sm rounded-3xl border border-slate-700/50 p-6 space-y-5">
-            <div className="text-center">
-              <div className="text-3xl mb-2">🌍</div>
-              <h2 className="text-white font-semibold text-base">Remote toegang</h2>
-              <p className="text-slate-400 text-sm mt-1">
-                Bedien uw lampen van overal via de Philips Hue cloud.
-              </p>
+
+          {/* Stap 1 – Callback URL */}
+          <div className="bg-slate-800/50 rounded-3xl border border-amber-500/40 p-5 space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="w-6 h-6 rounded-full bg-amber-400 text-slate-900 text-xs font-bold flex items-center justify-center flex-shrink-0">1</span>
+              <p className="text-white font-semibold text-sm">Callback URL registreren</p>
+            </div>
+            <p className="text-slate-400 text-xs leading-relaxed">
+              Kopieer deze URL en plak hem <strong className="text-white">exact</strong> in jouw Hue developer app op{' '}
+              <span className="text-amber-400">developers.meethue.com</span> → jouw app → <em>Callback URL</em>:
+            </p>
+            <div className="flex items-center gap-2 bg-slate-900 rounded-xl px-3 py-2.5 border border-amber-500/30">
+              <code className="text-xs text-amber-300 break-all flex-1 select-all">{getOAuthRedirectUri()}</code>
+              <button
+                onClick={() => navigator.clipboard.writeText(getOAuthRedirectUri())}
+                className="text-slate-400 hover:text-amber-400 text-lg flex-shrink-0 transition-colors"
+                title="Kopieer"
+              >📋</button>
+            </div>
+            <p className="text-orange-300/80 text-xs">
+              ⚠️ De fout <em>"Er is iets misgegaan"</em> bij Hue login wordt bijna altijd veroorzaakt door een <strong>onjuiste of ontbrekende Callback URL</strong>.
+            </p>
+          </div>
+
+          {/* Stap 2 – Client ID invoeren + inloggen */}
+          <div className="bg-slate-800/50 backdrop-blur-sm rounded-3xl border border-slate-700/50 p-5 space-y-4">
+            <div className="flex items-center gap-2">
+              <span className="w-6 h-6 rounded-full bg-amber-400 text-slate-900 text-xs font-bold flex items-center justify-center flex-shrink-0">2</span>
+              <p className="text-white font-semibold text-sm">Client ID invullen &amp; inloggen</p>
             </div>
 
             <div className="space-y-2">
@@ -281,13 +313,15 @@ export default function SetupWizard() {
                 className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-amber-400 font-mono"
               />
               <p className="text-xs text-slate-500">
-                Aanmaken via{' '}
-                <span className="text-amber-400">developers.meethue.com</span>
-                {' '}→ Create App
+                Te vinden op <span className="text-amber-400">developers.meethue.com</span> → jouw app
               </p>
             </div>
 
-            {error && <p className="text-red-400 text-xs">{error}</p>}
+            {error && (
+              <div className="bg-red-900/30 border border-red-700/50 rounded-xl p-3">
+                <p className="text-red-400 text-xs">{error}</p>
+              </div>
+            )}
 
             <button
               onClick={handleRemoteLogin}
@@ -298,35 +332,17 @@ export default function SetupWizard() {
             </button>
           </div>
 
-          {/* Redirect URI tonen */}
-          <div className="bg-slate-800/30 rounded-2xl border border-amber-500/20 p-4 space-y-2">
-            <p className="text-xs text-amber-400 font-semibold uppercase tracking-wide">Verplicht in Hue App registreren</p>
-            <p className="text-xs text-slate-400">Voeg deze <strong className="text-white">Callback URL</strong> toe in je Hue developer app:</p>
-            <div className="flex items-center gap-2 bg-slate-900 rounded-lg px-3 py-2">
-              <code className="text-xs text-amber-300 break-all flex-1">{getOAuthRedirectUri()}</code>
-              <button
-                onClick={() => navigator.clipboard.writeText(getOAuthRedirectUri())}
-                className="text-slate-500 hover:text-white text-xs flex-shrink-0"
-                title="Kopieer"
-              >📋</button>
-            </div>
-          </div>
-
-          {/* Setup instructies */}
+          {/* Checklist */}
           <div className="bg-slate-800/30 rounded-2xl border border-slate-700/30 p-4 space-y-3">
-            <p className="text-xs text-slate-400 font-semibold uppercase tracking-wide">Eenmalige setup</p>
+            <p className="text-xs text-slate-400 font-semibold uppercase tracking-wide">Checklist developers.meethue.com</p>
             {[
-              { n: '1', text: 'Ga naar developers.meethue.com → Inloggen' },
-              { n: '2', text: 'Klik "Create App" → vul naam in → kies "Remote API"' },
-              { n: '3', text: 'Plak de Callback URL hierboven in het "Callback URL" veld' },
-              { n: '4', text: 'Kopieer de Client ID en plak die hierboven' },
-              { n: '5', text: 'Stel in Vercel de env vars HUE_CLIENT_ID en HUE_CLIENT_SECRET in' },
-              { n: '6', text: 'Klik "Inloggen met Hue account" en geef toestemming' },
-            ].map(({ n, text }) => (
-              <div key={n} className="flex gap-3">
-                <div className="w-5 h-5 rounded-full bg-amber-400/20 text-amber-400 text-xs flex items-center justify-center flex-shrink-0 mt-0.5">
-                  {n}
-                </div>
+              { text: 'App type is ingesteld op "Remote API"' },
+              { text: `Callback URL = ${getOAuthRedirectUri()}` },
+              { text: 'Client ID gekopieerd en hierboven ingevoerd' },
+              { text: 'Vercel env vars: HUE_CLIENT_ID + HUE_CLIENT_SECRET ingesteld' },
+            ].map(({ text }, i) => (
+              <div key={i} className="flex gap-3 items-start">
+                <span className="text-amber-400 mt-0.5 flex-shrink-0">□</span>
                 <p className="text-xs text-slate-400 leading-relaxed">{text}</p>
               </div>
             ))}

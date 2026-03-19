@@ -6,6 +6,7 @@
  */
 import { useState, useRef, useCallback } from 'react';
 import { useHueStore } from '../store/useHueStore';
+import { ROOM_TEMPLATES } from '../data/roomTemplates';
 
 function generateId() {
   return Math.random().toString(36).slice(2, 9);
@@ -18,9 +19,11 @@ export default function RoomEditor({ room, onSave, onCancel }) {
   const [name, setName] = useState(room?.name || 'Nieuwe kamer');
   const [backgroundImage, setBackgroundImage] = useState(room?.backgroundImage || null);
   const [walls, setWalls] = useState(room?.walls || []);
+  const [furniture, setFurniture] = useState(room?.furniture || []);
   const [lightPlacements, setLightPlacements] = useState(room?.lightPlacements || []);
   const [mode, setMode] = useState('view'); // 'walls' | 'lights' | 'view'
   const [pendingLight, setPendingLight] = useState(null);
+  const [showTemplates, setShowTemplates] = useState(!room && (room?.walls || []).length === 0);
   const svgRef = useRef(null);
 
   const W = 800, H = 600;
@@ -59,12 +62,21 @@ export default function RoomEditor({ room, onSave, onCancel }) {
     }
   };
 
+  const applyTemplate = (tpl) => {
+    setName(tpl.name);
+    setWalls(tpl.walls);
+    setFurniture(tpl.furniture || []);
+    setLightPlacements([]);
+    setShowTemplates(false);
+  };
+
   const handleSave = () => {
     onSave({
       id: room?.id || generateId(),
       name,
       backgroundImage,
       walls,
+      furniture,
       lightPlacements,
       width: W,
       height: H,
@@ -74,6 +86,72 @@ export default function RoomEditor({ room, onSave, onCancel }) {
   const removePlacement = (lightId) => {
     setLightPlacements(prev => prev.filter(lp => lp.lightId !== lightId));
   };
+
+  // Template picker overlay
+  if (showTemplates) {
+    return (
+      <div className="flex flex-col h-full bg-slate-950">
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-800 safe-top">
+          <button onClick={onCancel} className="text-slate-400 text-sm">Annuleren</button>
+          <span className="flex-1 text-center text-white font-semibold text-base">Kies een template</span>
+          <button onClick={() => setShowTemplates(false)} className="text-slate-400 text-sm">Overslaan</button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-4 py-6 flex flex-col gap-4">
+          <p className="text-slate-400 text-sm text-center mb-2">
+            Start met een voorgebouwde plattegrond van jouw woning, of begin leeg.
+          </p>
+
+          {ROOM_TEMPLATES.map(tpl => (
+            <button
+              key={tpl.id}
+              onClick={() => applyTemplate(tpl)}
+              className="w-full bg-slate-800 border border-slate-700 rounded-2xl p-4 text-left active:bg-slate-700 transition-colors"
+            >
+              {/* Mini preview SVG */}
+              <svg viewBox={`0 0 ${tpl.width} ${tpl.height}`} className="w-full h-32 mb-3 rounded-xl bg-slate-900">
+                {/* furniture */}
+                {(tpl.furniture || []).map((f, i) => (
+                  <rect key={i} x={f.x} y={f.y} width={f.w} height={f.h}
+                    fill={f.style === 'door' ? '#60a5fa' : '#1e3a5f'}
+                    stroke="#334155" strokeWidth={2} rx={3} opacity={0.7} />
+                ))}
+                {/* walls */}
+                {tpl.walls.length > 1 && (
+                  <polyline
+                    points={tpl.walls.map(p => `${p.x},${p.y}`).join(' ')}
+                    fill="rgba(148,163,184,0.08)"
+                    stroke="#475569"
+                    strokeWidth={4}
+                    strokeLinejoin="round"
+                  />
+                )}
+                {/* light suggestions */}
+                {(tpl.lightSuggestions || []).map(ls => (
+                  <g key={ls.key}>
+                    <circle cx={ls.x} cy={ls.y} r={18} fill="#fbbf24" opacity={0.25} />
+                    <circle cx={ls.x} cy={ls.y} r={10} fill="#fbbf24" opacity={0.7} />
+                  </g>
+                ))}
+              </svg>
+
+              <p className="text-white font-semibold text-base">{tpl.name}</p>
+              <p className="text-slate-400 text-xs mt-0.5">
+                {tpl.lightSuggestions?.length} lamp-posities voorgesteld
+              </p>
+            </button>
+          ))}
+
+          <button
+            onClick={() => setShowTemplates(false)}
+            className="w-full py-4 bg-slate-800/50 border border-dashed border-slate-700 rounded-2xl text-slate-400 text-sm"
+          >
+            + Lege kamer starten
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full bg-slate-950">
@@ -130,6 +208,13 @@ export default function RoomEditor({ room, onSave, onCancel }) {
             🗑 Wissen
           </button>
         )}
+
+        <button
+          onClick={() => setShowTemplates(true)}
+          className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 rounded-xl text-xs text-slate-300 border border-slate-700 whitespace-nowrap"
+        >
+          🏠 Templates
+        </button>
       </div>
 
       {/* SVG canvas */}
@@ -153,6 +238,24 @@ export default function RoomEditor({ room, onSave, onCancel }) {
             </pattern>
           </defs>
           <rect width={W} height={H} fill="url(#grid)" />
+
+          {/* Furniture shapes */}
+          {furniture.map((f, i) => (
+            <rect
+              key={i}
+              x={f.x} y={f.y} width={f.w} height={f.h}
+              fill={f.style === 'door' ? 'rgba(96,165,250,0.2)' : 'rgba(30,58,95,0.5)'}
+              stroke={f.style === 'door' ? '#60a5fa' : '#334155'}
+              strokeWidth={1.5}
+              rx={3}
+            />
+          ))}
+          {furniture.map((f, i) => (
+            <text key={`lbl-${i}`} x={f.x + f.w / 2} y={f.y + f.h / 2 + 4}
+              textAnchor="middle" fontSize={9} fill="#475569" style={{ pointerEvents: 'none' }}>
+              {f.label}
+            </text>
+          ))}
 
           {/* Walls */}
           {walls.length > 1 && (

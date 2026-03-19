@@ -104,6 +104,18 @@ export default function FloorPlan({ room }) {
           />
         )}
 
+        {/* Furniture shapes */}
+        {(room.furniture || []).map((f, i) => (
+          <rect
+            key={i}
+            x={f.x} y={f.y} width={f.w} height={f.h}
+            fill={f.style === 'door' ? 'rgba(96,165,250,0.15)' : 'rgba(30,58,95,0.4)'}
+            stroke={f.style === 'door' ? '#60a5fa' : '#1e3a5f'}
+            strokeWidth={1.5}
+            rx={3}
+          />
+        ))}
+
         {/* Room outline (walls) */}
         {room.walls && room.walls.length > 1 && (
           <polyline

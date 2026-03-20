@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useHueStore } from '../store/useHueStore';
-import { getLightColor } from '../services/hue';
+import { getLightColor, clearConfig } from '../services/hue';
 import FloorPlan from '../components/FloorPlan';
 import RoomEditor from '../components/RoomEditor';
 import ScenePanel from '../components/ScenePanel';
@@ -13,8 +13,14 @@ export default function MainApp() {
     setActiveRoom, addRoom, updateRoom, deleteRoom,
     editMode, setEditMode,
     refresh, startPolling, stopPolling,
-    toggleLight,
+    toggleLight, disconnect,
   } = useHueStore();
+
+  const handleDisconnect = () => {
+    disconnect();
+    clearConfig();
+    window.location.reload();
+  };
 
   const [showRoomEditor, setShowRoomEditor] = useState(false);
   const [editingRoom, setEditingRoom] = useState(null);
@@ -212,6 +218,15 @@ export default function MainApp() {
                 className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm text-blue-400 hover:bg-blue-900/20 border border-dashed border-blue-800"
               >
                 <span>+</span> Kamer toevoegen
+              </button>
+            </div>
+
+            <div className="px-3 pb-5 pt-2 border-t border-slate-800 mt-2">
+              <button
+                onClick={handleDisconnect}
+                className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm text-red-400 hover:bg-red-900/20"
+              >
+                <span>🔌</span> Verbinding verbreken
               </button>
             </div>
           </div>

@@ -28,9 +28,7 @@ export default function App() {
     if (code) {
       // Clear code from URL immediately (prevents re-use on refresh)
       window.history.replaceState({}, '', '/');
-      const clientId = params.get('state')
-        ? (getClientId() || params.get('state'))
-        : getClientId();
+      const clientId = getClientId();
 
       setOauthLoading(true);
       (async () => {

@@ -482,28 +482,35 @@ export async function getValidRemoteToken() {
 
 /**
  * After OAuth: link bridge to get/confirm the whitelist username.
- * With Remote API, username = the stored API key.
- * This creates a whitelist entry if not yet done.
+ * Remote API flow:
+ *   1. PUT /bridge/0/config with {linkbutton:true} — virtually presses the link button
+ *   2. POST /bridge/ with {devicetype:...} — creates the whitelist username
  */
 export async function linkRemoteBridge(accessToken) {
-  // Try to create whitelist entry (press link button is NOT required for Remote API)
-  const res = await fetch(`${REMOTE_BASE}/bridge/0/config`, {
+  const headers = {
+    'Authorization': `Bearer ${accessToken}`,
+    'Content-Type': 'application/json',
+  };
+
+  // Step 1: virtually press the link button
+  await fetch(`${REMOTE_BASE}/bridge/0/config`, {
     method: 'PUT',
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
+    headers,
+    body: JSON.stringify({ linkbutton: true }),
+  });
+
+  // Step 2: create whitelist entry (username)
+  const res = await fetch(`${REMOTE_BASE}/bridge/`, {
+    method: 'POST',
+    headers,
     body: JSON.stringify({ devicetype: HUE_APP_NAME }),
   });
   const data = await res.json();
-  // The response contains the whitelist username
   if (Array.isArray(data) && data[0]?.success?.username) {
     return data[0].success.username;
   }
-  // Fallback: try fetching existing whitelist
-  if (data.whitelist) {
-    const firstKey = Object.keys(data.whitelist)[0];
-    if (firstKey) return firstKey;
+  if (data[0]?.error) {
+    throw new Error(`Bridge koppeling mislukt: ${data[0].error.description}`);
   }
   throw new Error('Bridge koppeling mislukt – probeer opnieuw');
 }

@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback, useEffect } from 'react';
+import { useRef, useState, useCallback } from 'react';
 import { useHueStore } from '../store/useHueStore';
 import LightBulb from './LightBulb';
 import LightControls from './LightControls';
@@ -12,10 +12,10 @@ export default function FloorPlan({ room }) {
   const svgRef = useRef(null);
   const panStart = useRef(null);
   const pinchStart = useRef(null);
+  const lastTap = useRef(0);
 
   const toggleLight = useHueStore(s => s.toggleLight);
 
-  // Touch: pinch-zoom + pan
   const handleTouchStart = (e) => {
     if (e.touches.length === 2) {
       const dx = e.touches[0].clientX - e.touches[1].clientX;
@@ -50,8 +50,6 @@ export default function FloorPlan({ room }) {
     pinchStart.current = null;
   };
 
-  // Double-tap to reset view
-  const lastTap = useRef(0);
   const handleDoubleTap = () => {
     const now = Date.now();
     if (now - lastTap.current < 300) {
@@ -73,9 +71,23 @@ export default function FloorPlan({ room }) {
 
   const W = room.width || 800;
   const H = room.height || 600;
+  const isZoomed = zoom !== 1 || pan.x !== 0 || pan.y !== 0;
+
+  const placedLightCount = (room.lightPlacements || []).filter(lp => lights[lp.lightId]).length;
 
   return (
     <div className="relative w-full h-full overflow-hidden bg-slate-950">
+      {/* Empty floor plan hint */}
+      {placedLightCount === 0 && !editMode && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+          <div className="text-center space-y-2 px-8">
+            <div className="text-4xl opacity-30">💡</div>
+            <p className="text-slate-600 text-sm">Geen lampen op de plattegrond</p>
+            <p className="text-slate-700 text-xs">Druk op ✏️ om lampen te plaatsen</p>
+          </div>
+        </div>
+      )}
+
       {/* SVG Floor Plan */}
       <svg
         ref={svgRef}
@@ -91,51 +103,55 @@ export default function FloorPlan({ room }) {
         onTouchEnd={handleTouchEnd}
         onClick={handleDoubleTap}
       >
-        {/* Background photo/image */}
+        {/* Grid (subtle) */}
+        <defs>
+          <pattern id="fp-grid" width={40} height={40} patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" strokeWidth={0.4} />
+          </pattern>
+        </defs>
+        <rect width={W} height={H} fill="url(#fp-grid)" opacity={0.5} />
+
+        {/* Background photo */}
         {room.backgroundImage && (
           <image
             href={room.backgroundImage}
-            x={0}
-            y={0}
-            width={W}
-            height={H}
+            x={0} y={0} width={W} height={H}
             preserveAspectRatio="xMidYMid meet"
-            opacity={0.25}
+            opacity={0.22}
           />
         )}
 
-        {/* Furniture shapes */}
+        {/* Furniture */}
         {(room.furniture || []).map((f, i) => (
-          <rect
-            key={i}
-            x={f.x} y={f.y} width={f.w} height={f.h}
-            fill={f.style === 'door' ? 'rgba(96,165,250,0.15)' : 'rgba(30,58,95,0.4)'}
-            stroke={f.style === 'door' ? '#60a5fa' : '#1e3a5f'}
-            strokeWidth={1.5}
-            rx={3}
-          />
+          <g key={i}>
+            <rect
+              x={f.x} y={f.y} width={f.w} height={f.h}
+              fill={f.style === 'door' ? 'rgba(96,165,250,0.12)' : 'rgba(30,58,95,0.35)'}
+              stroke={f.style === 'door' ? '#60a5fa' : '#1e3a5f'}
+              strokeWidth={1.5} rx={3}
+            />
+            <text x={f.x + f.w / 2} y={f.y + f.h / 2 + 4}
+              textAnchor="middle" fontSize={9} fill="#374151"
+              style={{ pointerEvents: 'none' }}>
+              {f.label}
+            </text>
+          </g>
         ))}
 
-        {/* Room outline (walls) */}
+        {/* Room outline */}
         {room.walls && room.walls.length > 1 && (
           <polyline
             points={room.walls.map(p => `${p.x},${p.y}`).join(' ')}
-            fill="rgba(148,163,184,0.08)"
-            stroke="#334155"
-            strokeWidth={2}
+            fill="rgba(148,163,184,0.05)"
+            stroke="#2d3f57"
+            strokeWidth={2.5}
             strokeLinejoin="round"
           />
         )}
 
-        {/* Room name */}
-        <text
-          x={20}
-          y={30}
-          fontSize={14}
-          fill="#64748b"
-          fontWeight="500"
-          style={{ fontFamily: 'inherit' }}
-        >
+        {/* Room name label */}
+        <text x={16} y={26} fontSize={13} fill="#334155" fontWeight="600"
+          style={{ fontFamily: 'inherit', pointerEvents: 'none' }}>
           {room.name}
         </text>
 
@@ -150,9 +166,7 @@ export default function FloorPlan({ room }) {
               x={lp.x}
               y={lp.y}
               editMode={editMode}
-              onTap={() => {
-                if (!editMode) toggleLight(lp.lightId);
-              }}
+              onTap={() => { if (!editMode) toggleLight(lp.lightId); }}
               onLongPress={() => {
                 setSelectedLight(lp.lightId);
                 setShowControls(true);
@@ -163,14 +177,28 @@ export default function FloorPlan({ room }) {
         })}
       </svg>
 
-      {/* Zoom reset button */}
-      {(zoom !== 1 || pan.x !== 0 || pan.y !== 0) && (
+      {/* Zoom reset — only shown when zoomed */}
+      {isZoomed && (
         <button
           onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}
-          className="absolute top-4 right-4 bg-slate-800/80 backdrop-blur-sm text-white text-xs px-3 py-1.5 rounded-full border border-slate-700"
+          className="absolute top-3 right-3 bg-slate-800/90 backdrop-blur-sm text-white text-xs px-3 py-1.5 rounded-full border border-slate-700 shadow-lg"
         >
-          Reset weergave
+          ⊙ Reset weergave
         </button>
+      )}
+
+      {/* Zoom level indicator */}
+      {zoom !== 1 && (
+        <div className="absolute bottom-3 right-3 bg-slate-800/70 text-slate-400 text-xs px-2 py-1 rounded-full pointer-events-none">
+          {Math.round(zoom * 100)}%
+        </div>
+      )}
+
+      {/* Double-tap hint */}
+      {isZoomed && (
+        <div className="absolute bottom-3 left-3 text-slate-700 text-xs pointer-events-none">
+          Dubbel tik om terug te zetten
+        </div>
       )}
 
       {/* Light controls sheet */}

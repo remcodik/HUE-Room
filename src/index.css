@@ -27,10 +27,10 @@ body {
 
 /* Light glow animation */
 @keyframes pulse-glow {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.75; }
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.65; transform: scale(1.08); }
 }
-.light-pulse { animation: pulse-glow 2.5s ease-in-out infinite; }
+.light-pulse { animation: pulse-glow 2.8s ease-in-out infinite; }
 
 /* Ripple on tap */
 @keyframes ripple {
@@ -39,20 +39,29 @@ body {
 .ripple {
   position: absolute;
   border-radius: 50%;
-  background: rgba(255,255,255,0.35);
+  background: rgba(255,255,255,0.3);
   transform: scale(0);
-  animation: ripple 0.55s linear;
+  animation: ripple 0.5s linear;
   pointer-events: none;
 }
 
 /* Bottom sheet slide-up */
 @keyframes slide-up {
-  from { transform: translateY(100%); }
-  to   { transform: translateY(0); }
+  from { transform: translateY(100%); opacity: 0; }
+  to   { transform: translateY(0);   opacity: 1; }
 }
-.sheet-enter { animation: slide-up 0.32s cubic-bezier(0.32, 0.72, 0, 1); }
+.sheet-enter {
+  animation: slide-up 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+}
 
-/* Smooth spring transitions */
+/* Fade in */
+@keyframes fade-in {
+  from { opacity: 0; transform: scale(0.97); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.fade-in { animation: fade-in 0.2s ease; }
+
+/* Spring transitions */
 .transition-spring {
   transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
@@ -60,3 +69,32 @@ body {
 /* Scrollbar hide */
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Range input styling */
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+input[type="range"]::-webkit-slider-thumb:active {
+  transform: scale(1.2);
+}
+input[type="range"]::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+  cursor: pointer;
+  border: none;
+}
+
+/* Active scale utility */
+.active\:scale-98:active { transform: scale(0.98); }
+.active\:scale-99:active { transform: scale(0.99); }

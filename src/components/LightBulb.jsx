@@ -1,7 +1,7 @@
 import { useRef, useState, useCallback } from 'react';
 import { getLightColor } from '../services/hue';
 
-const LONG_PRESS_MS = 450;
+const LONG_PRESS_MS = 420;
 
 export default function LightBulb({ light, x, y, onTap, onLongPress, editMode, onDrag }) {
   const [pressing, setPressing] = useState(false);
@@ -12,6 +12,8 @@ export default function LightBulb({ light, x, y, onTap, onLongPress, editMode, o
   const color = getLightColor(light);
   const isOn = light.on;
   const brightness = isOn ? (light.bri / 254) : 0;
+  const glowRadius = isOn ? 10 + brightness * 18 : 0;
+  const glowOpacity = isOn ? 0.15 + brightness * 0.25 : 0;
 
   const handleStart = useCallback((clientX, clientY) => {
     movedRef.current = false;
@@ -20,12 +22,13 @@ export default function LightBulb({ light, x, y, onTap, onLongPress, editMode, o
     timerRef.current = setTimeout(() => {
       if (!movedRef.current) {
         setPressing(false);
+        if (navigator.vibrate) navigator.vibrate(30);
         onLongPress?.();
       }
     }, LONG_PRESS_MS);
   }, [onLongPress]);
 
-  const handleEnd = useCallback((clientX, clientY) => {
+  const handleEnd = useCallback(() => {
     clearTimeout(timerRef.current);
     setPressing(false);
     if (!movedRef.current) {
@@ -37,10 +40,12 @@ export default function LightBulb({ light, x, y, onTap, onLongPress, editMode, o
     if (!startPosRef.current) return;
     const dx = clientX - startPosRef.current.x;
     const dy = clientY - startPosRef.current.y;
-    if (Math.abs(dx) > 8 || Math.abs(dy) > 8) {
-      movedRef.current = true;
-      clearTimeout(timerRef.current);
-      setPressing(false);
+    if (Math.abs(dx) > 6 || Math.abs(dy) > 6) {
+      if (!movedRef.current) {
+        movedRef.current = true;
+        clearTimeout(timerRef.current);
+        setPressing(false);
+      }
       if (editMode) {
         onDrag?.({ dx, dy });
         startPosRef.current = { x: clientX, y: clientY };
@@ -48,7 +53,6 @@ export default function LightBulb({ light, x, y, onTap, onLongPress, editMode, o
     }
   }, [editMode, onDrag]);
 
-  // Touch handlers
   const onTouchStart = (e) => {
     const t = e.touches[0];
     handleStart(t.clientX, t.clientY);
@@ -57,28 +61,20 @@ export default function LightBulb({ light, x, y, onTap, onLongPress, editMode, o
     const t = e.touches[0];
     handleMove(t.clientX, t.clientY);
   };
-  const onTouchEnd = (e) => {
-    const t = e.changedTouches[0];
-    handleEnd(t.clientX, t.clientY);
-  };
+  const onTouchEnd = () => handleEnd();
 
-  // Mouse handlers (for desktop) – attach move/up to document so fast drags don't break
   const onMouseDown = (e) => {
     e.preventDefault();
     handleStart(e.clientX, e.clientY);
-
     const onDocMove = (ev) => handleMove(ev.clientX, ev.clientY);
-    const onDocUp = (ev) => {
-      handleEnd(ev.clientX, ev.clientY);
+    const onDocUp = () => {
+      handleEnd();
       document.removeEventListener('mousemove', onDocMove);
       document.removeEventListener('mouseup', onDocUp);
     };
     document.addEventListener('mousemove', onDocMove);
     document.addEventListener('mouseup', onDocUp);
   };
-
-  const glowSize = isOn ? 8 + brightness * 16 : 0;
-  const glowOpacity = isOn ? 0.5 + brightness * 0.4 : 0;
 
   return (
     <g
@@ -89,76 +85,80 @@ export default function LightBulb({ light, x, y, onTap, onLongPress, editMode, o
       onTouchEnd={onTouchEnd}
       onMouseDown={onMouseDown}
     >
-      {/* Glow halo */}
+      {/* Glow ring */}
       {isOn && (
         <circle
-          r={glowSize + 12}
+          r={glowRadius + 16}
           fill={color}
-          opacity={glowOpacity * 0.3}
-          className={isOn ? 'light-pulse' : ''}
+          opacity={glowOpacity}
+          className="light-pulse"
         />
       )}
 
-      {/* Outer ring */}
+      {/* Outer border */}
       <circle
-        r={18}
-        fill={pressing ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.05)'}
-        stroke={isOn ? color : '#334155'}
-        strokeWidth={2}
-        style={{ transition: 'all 0.25s ease' }}
+        r={20}
+        fill={pressing ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.04)'}
+        stroke={isOn ? color : '#1e3a5f'}
+        strokeWidth={editMode ? 2.5 : 1.5}
+        style={{ transition: 'stroke 0.3s ease, fill 0.15s ease' }}
       />
 
-      {/* Main bulb body */}
+      {/* Main fill */}
       <circle
-        r={13}
-        fill={isOn ? color : '#1e293b'}
+        r={14}
+        fill={isOn ? color : '#0f172a'}
         style={{
-          transition: 'fill 0.35s ease',
-          filter: isOn ? `drop-shadow(0 0 ${glowSize}px ${color})` : 'none',
+          transition: 'fill 0.4s ease',
+          filter: isOn ? `drop-shadow(0 0 ${4 + brightness * 8}px ${color})` : 'none',
         }}
       />
 
-      {/* Bulb icon - simplified */}
-      <g fill={isOn ? '#0f172a' : '#475569'} opacity={0.7}>
-        {/* Top oval */}
-        <ellipse cx={0} cy={-2} rx={4.5} ry={5} />
-        {/* Bottom cap */}
-        <rect x={-2.5} y={4} width={5} height={2} rx={1} />
-        <rect x={-3.5} y={6} width={7} height={1.5} rx={0.75} />
+      {/* Bulb icon */}
+      <g fill={isOn ? 'rgba(0,0,0,0.45)' : '#334155'} style={{ pointerEvents: 'none' }}>
+        <ellipse cx={0} cy={-2} rx={4.5} ry={5.2} />
+        <rect x={-3} y={4.5} width={6} height={2} rx={1} />
+        <rect x={-3.5} y={6.5} width={7} height={1.5} rx={0.75} />
       </g>
 
-      {/* Press ripple */}
+      {/* Press feedback */}
       {pressing && (
-        <circle r={18} fill="white" opacity={0.1} className="ripple" />
+        <circle r={20} fill="white" opacity={0.08} />
       )}
 
-      {/* Light name */}
+      {/* Label */}
       <text
-        y={28}
+        y={32}
         textAnchor="middle"
         fontSize={9}
-        fill={isOn ? '#f1f5f9' : '#64748b'}
+        fontWeight={isOn ? '600' : '400'}
+        fill={isOn ? '#e2e8f0' : '#475569'}
         style={{ pointerEvents: 'none', fontFamily: 'inherit' }}
       >
-        {light.name.length > 12 ? light.name.slice(0, 11) + '…' : light.name}
+        {light.name.length > 13 ? light.name.slice(0, 12) + '…' : light.name}
       </text>
 
-      {/* Brightness bar (small arc below) */}
+      {/* Brightness bar */}
       {isOn && (
         <rect
-          x={-13}
-          y={20}
-          width={Math.round(26 * brightness)}
-          height={2}
-          rx={1}
+          x={-14}
+          y={22}
+          width={Math.round(28 * brightness)}
+          height={2.5}
+          rx={1.25}
           fill={color}
-          opacity={0.7}
+          opacity={0.65}
         />
       )}
+      {/* Brightness bar track */}
+      <rect x={-14} y={22} width={28} height={2.5} rx={1.25} fill="none" stroke="#1e293b" strokeWidth={0.5} opacity={0.5} />
 
-      {/* Edit mode drag handle */}
+      {/* Edit drag handle */}
       {editMode && (
-        <circle r={5} cx={13} cy={-13} fill="#3b82f6" stroke="#1e40af" strokeWidth={1} />
+        <g transform="translate(15,-15)">
+          <circle r={6} fill="#2563eb" stroke="#1d4ed8" strokeWidth={1.5} />
+          <path d="M-2-2 L2-2 L0 2 Z" fill="white" opacity={0.8} />
+        </g>
       )}
     </g>
   );
